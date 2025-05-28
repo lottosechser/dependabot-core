@@ -153,9 +153,9 @@ module Dependabot
         Dependabot.logger.info("Fetching releases for Helm chart: #{chart_name}")
 
         if repo_name && repo_url
-          authenticate_registry_source(repo_url)
+          is_auth_repo = authenticate_registry_source(repo_name, repo_url)
           begin
-            Helpers.add_repo(repo_name, repo_url)
+            Helpers.add_repo(repo_name, repo_url) unless is_auth_repo
             Helpers.update_repo
           rescue StandardError => e
             Dependabot.logger.error("Error adding/updating Helm repository: #{e.message}")
@@ -178,15 +178,19 @@ module Dependabot
         end
       end
 
-      sig { params(repo_url: T.nilable(String)).returns(T.nilable(String)) }
-      def authenticate_registry_source(repo_url)
+      sig { params(repo_name: T.nilable(String), repo_url: T.nilable(String)).returns(T.nilable(String)) }
+      def authenticate_registry_source(repo_name, repo_url)
         return unless repo_url
 
         repo_creds = Shared::Utils::CredentialsFinder.new(@credentials, private_repository_type: "helm_registry")
                                                      .credentials_for_registry(repo_url)
         return unless repo_creds
 
-        Helpers.registry_login(T.must(repo_creds["username"]), T.must(repo_creds["password"]), repo_url)
+        begin
+          Helpers.registry_login(T.must(repo_creds["username"]), T.must(repo_creds["password"]), repo_url)
+        rescue
+          return Helpers.add_repo_auth(T.must(repo_creds["username"]), T.must(repo_creds["password"]), repo_name, repo_url)
+        end
       rescue StandardError
         raise PrivateSourceAuthenticationFailure, repo_url
       end

@@ -32,6 +32,16 @@ module Dependabot
         )
       end
 
+      sig { params(username: String, password: String, repo_name: String, repository_url: String).returns(String) }
+      def self.add_repo_auth(username, password, repo_name, repository_url)
+        Dependabot.logger.info("Adding Helm repository using username and password: #{repo_name} (#{repository_url})")
+
+        Dependabot::SharedHelpers.run_shell_command(
+          "helm repo add --username #{username} --password #{password} #{repo_name} #{repository_url}",
+          fingerprint: "helm repo add --username <username> --password <password> <repo_name> <repository_url>"
+        )
+      end
+
       sig { returns(String) }
       def self.update_repo
         Dependabot.logger.info("Updating Helm repositories")
@@ -61,10 +71,16 @@ module Dependabot
           fingerprint: "helm registry login --username <username> --password <password> <repository_url>"
         )
       rescue StandardError => e
-        Dependabot.logger.error(
-          "Failed to authenticate for #{repository_url}: #{e.message}"
-        )
-        raise
+        if e.message =~ /400 Bad Request/
+          Dependabot.logger.info(
+            "The given source (#{repository_url}) is not a helm registry."
+          )
+        else
+          Dependabot.logger.error(
+            "Failed to authenticate for #{repository_url}: #{e.message}"
+          )
+          raise
+        end
       end
 
       sig { params(username: String, password: String, repository_url: String).returns(String) }
